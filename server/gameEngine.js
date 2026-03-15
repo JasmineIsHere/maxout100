@@ -1,10 +1,10 @@
 const MAX_COUNTER = 100;
 const STARTING_HAND = 2;
 
-const SUITS = ['S', 'H', 'D', 'C'];
+const SUITS = ['♠️', '♥️', '♦️', '♣️'];
 const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
 
-const isAceOfSpades = (card) => card.rank === 'A' && card.suit === 'S';
+const isAceOfSpades = (card) => card.rank === 'A' && card.suit === '♠️';
 const isNumberRank = (rank) => /^[0-9]+$/.test(rank);
 
 const clonePlayers = (players) =>

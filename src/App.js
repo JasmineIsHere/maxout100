@@ -4,7 +4,7 @@ import './App.css';
 const MAX_COUNTER = 100;
 const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:8080';
 
-const isAceOfSpades = (card) => card.rank === 'A' && card.suit === '♠️';
+const isAceOfSpades = (card) => card.rank === 'A' && card.suit === 'S';
 const isNumberRank = (rank) => /^[0-9]+$/.test(rank);
 const cardLabel = (card) => `${card.rank}${card.suit}`;
 

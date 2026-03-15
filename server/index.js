@@ -17,7 +17,7 @@ const createRoomCode = () => {
 
 const broadcast = (room) => {
   const payload = JSON.stringify({ type: 'state_update', state: room.state });
-  room.clients.forEach((client) => {
+  room.clients.forEach((playerId, client) => {
     if (client.readyState === WebSocket.OPEN) {
       client.send(payload);
     }
