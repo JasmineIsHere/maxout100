@@ -1,38 +1,12 @@
 import { useEffect, useMemo, useState } from 'react';
 import './App.css';
 
-const MAX_PLAYERS = 10;
-const MIN_PLAYERS = 2;
-const STARTING_HAND = 2;
 const MAX_COUNTER = 100;
-
-const SUITS = ['S', 'H', 'D', 'C'];
-const RANKS = ['2', '3', '4', '5', '6', '7', '8', '9', '10', 'J', 'Q', 'K', 'A'];
+const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:8080';
 
 const isAceOfSpades = (card) => card.rank === 'A' && card.suit === 'S';
 const isNumberRank = (rank) => /^[0-9]+$/.test(rank);
-
 const cardLabel = (card) => `${card.rank}${card.suit}`;
-
-let globalCardId = 0;
-
-const drawCard = (deck, pile) => {
-  const rank = RANKS[Math.floor(Math.random() * RANKS.length)];
-  const suit = SUITS[Math.floor(Math.random() * SUITS.length)];
-  const card = { id: `${rank}${suit}-${globalCardId}`, rank, suit };
-  globalCardId += 1;
-  return { deck, pile, card };
-};
-
-const getNextAliveIndex = (startIndex, players) => {
-  for (let offset = 1; offset <= players.length; offset += 1) {
-    const idx = (startIndex + offset) % players.length;
-    if (players[idx]?.alive) {
-      return idx;
-    }
-  }
-  return -1;
-};
 
 const getPlayableCards = (player, counter) => {
   return player.hand.filter((card) => {
@@ -46,374 +20,100 @@ const getPlayableCards = (player, counter) => {
   });
 };
 
-const createPlayerConfigs = (count) =>
-  Array.from({ length: count }, (_, index) => ({
-    id: `cfg-${index}`,
-    name: `Player ${index + 1}`,
-  }));
-
 function App() {
-  const [gamePhase, setGamePhase] = useState('setup');
-  const [playerConfigs, setPlayerConfigs] = useState(() => createPlayerConfigs(4));
-  const [players, setPlayers] = useState([]);
-  const [deck, setDeck] = useState(null);
-  const [pile, setPile] = useState([]);
-  const [counter, setCounter] = useState(0);
-  const [currentPlayerId, setCurrentPlayerId] = useState(null);
-  const [skipNext, setSkipNext] = useState(false);
-  const [pendingQueen, setPendingQueen] = useState(null);
-  const [pendingKing, setPendingKing] = useState(null);
-  const [pendingKill, setPendingKill] = useState(null);
-  const [log, setLog] = useState([]);
-
-  const alivePlayers = useMemo(() => players.filter((player) => player.alive), [players]);
-  const currentPlayer = players.find((player) => player.id === currentPlayerId);
-
-  const addLog = (message) => {
-    setLog((prev) => [message, ...prev]);
-  };
-
-  const resetGame = () => {
-    setGamePhase('setup');
-    setPlayers([]);
-    setDeck(null);
-    setPile([]);
-    setCounter(0);
-    setCurrentPlayerId(null);
-    setSkipNext(false);
-    setPendingQueen(null);
-    setPendingKing(null);
-    setPendingKill(null);
-    setLog([]);
-  };
-
-  const startGame = () => {
-    const trimmedConfigs = playerConfigs
-      .slice(0, MAX_PLAYERS)
-      .map((cfg, index) => ({
-        id: `P${index + 1}`,
-        name: cfg.name.trim() || `Player ${index + 1}`,
-        hand: [],
-        alive: true,
-      }));
-    let nextDeck = null;
-    let nextPile = [];
-    const nextPlayers = trimmedConfigs.map((player) => ({ ...player }));
-    for (let round = 0; round < STARTING_HAND; round += 1) {
-      nextPlayers.forEach((player) => {
-        const draw = drawCard(nextDeck, nextPile);
-        nextDeck = draw.deck;
-        nextPile = draw.pile;
-        if (draw.card) {
-          player.hand.push(draw.card);
-        }
-      });
-    }
-    setPlayers(nextPlayers);
-    setDeck(nextDeck);
-    setPile(nextPile);
-    setCounter(0);
-    setCurrentPlayerId(nextPlayers[0]?.id ?? null);
-    setGamePhase('playing');
-    setLog([`Game started with ${nextPlayers.length} players.`]);
-  };
-
-  const applyDrawToPlayer = (playerId, workingDeck, workingPile, workingPlayers) => {
-    const draw = drawCard(workingDeck, workingPile);
-    const playerIndex = workingPlayers.findIndex((player) => player.id === playerId);
-    if (playerIndex >= 0 && draw.card) {
-      workingPlayers[playerIndex].hand.push(draw.card);
-    }
-    return {
-      deck: draw.deck,
-      pile: draw.pile,
-      players: workingPlayers,
-    };
-  };
-
-  const advanceTurnFrom = (fromPlayerId, workingPlayers, shouldSkipNext) => {
-    if (workingPlayers.filter((player) => player.alive).length <= 1) {
-      return { nextPlayerId: null, skipNextValue: false };
-    }
-    const startIndex = workingPlayers.findIndex((player) => player.id === fromPlayerId);
-    let nextIndex = getNextAliveIndex(startIndex, workingPlayers);
-    let nextSkip = shouldSkipNext;
-    if (nextIndex >= 0 && nextSkip) {
-      nextSkip = false;
-      nextIndex = getNextAliveIndex(nextIndex, workingPlayers);
-    }
-    return { nextPlayerId: workingPlayers[nextIndex]?.id ?? null, skipNextValue: nextSkip };
-  };
-
-  const eliminatePlayer = (playerId, reason, workingPlayers) => {
-    const nextPlayers = workingPlayers.map((player) =>
-      player.id === playerId ? { ...player, alive: false } : player
-    );
-    const eliminated = nextPlayers.find((player) => player.id === playerId);
-    if (eliminated) {
-      addLog(`${eliminated.name} was eliminated. ${reason}`);
-    }
-    return nextPlayers;
-  };
-
-  const endIfWinner = (workingPlayers) => {
-    const alive = workingPlayers.filter((player) => player.alive);
-    if (alive.length === 1) {
-      setGamePhase('over');
-      addLog(`${alive[0].name} wins the game.`);
-      return true;
-    }
-    return false;
-  };
-
-  const playCardAndAdvance = (card, playerId, counterDelta, newCounterValue) => {
-    let nextDeck = deck;
-    let nextPile = [...pile, card];
-    const nextPlayers = players.map((player) =>
-      player.id === playerId
-        ? { ...player, hand: player.hand.filter((handCard) => handCard.id !== card.id) }
-        : { ...player }
-    );
-    if (counterDelta !== 0) {
-      setCounter(counter + counterDelta);
-    } else if (newCounterValue !== null) {
-      setCounter(newCounterValue);
-    }
-    let updated = applyDrawToPlayer(playerId, nextDeck, nextPile, nextPlayers);
-    nextDeck = updated.deck;
-    nextPile = updated.pile;
-
-    const advance = advanceTurnFrom(playerId, updated.players, skipNext);
-    setPlayers(updated.players);
-    setDeck(nextDeck);
-    setPile(nextPile);
-    setSkipNext(advance.skipNextValue);
-    setCurrentPlayerId(advance.nextPlayerId);
-  };
-
-  const handlePlayCard = (card) => {
-    if (!currentPlayer || currentPlayer.id !== currentPlayerId) return;
-    if (pendingKill || pendingQueen || pendingKing) return;
-
-    if (card.rank === 'Q') {
-      setPendingQueen({ card, playerId: currentPlayer.id });
-      return;
-    }
-    if (card.rank === 'K') {
-      setPendingKing({ card, playerId: currentPlayer.id });
-      return;
-    }
-    if (card.rank === 'J') {
-      addLog(`${currentPlayer.name} played a Jack. Next player is skipped.`);
-      setSkipNext(true);
-      playCardAndAdvance(card, currentPlayer.id, 0, null);
-      return;
-    }
-    if (isAceOfSpades(card)) {
-      addLog(`${currentPlayer.name} played the Ace of Spades. Counter resets to 0.`);
-      playCardAndAdvance(card, currentPlayer.id, 0, 0);
-      return;
-    }
-    if (card.rank === '4') {
-      addLog(`${currentPlayer.name} played a 4.`);
-      playCardAndAdvance(card, currentPlayer.id, 4, null);
-      return;
-    }
-    if (card.rank === 'A') {
-      addLog(`${currentPlayer.name} played an Ace for 1.`);
-      playCardAndAdvance(card, currentPlayer.id, 1, null);
-      return;
-    }
-    if (isNumberRank(card.rank)) {
-      const value = Number(card.rank);
-      addLog(`${currentPlayer.name} played ${cardLabel(card)} for ${value}.`);
-      playCardAndAdvance(card, currentPlayer.id, value, null);
-    }
-  };
-
-  const resolveQueen = (direction) => {
-    if (!pendingQueen) return;
-    const { card, playerId } = pendingQueen;
-    const delta = direction === 'up' ? 30 : -30;
-    const nextCounter = Math.max(0, counter + delta);
-    addLog(
-      `${players.find((player) => player.id === playerId)?.name ?? 'Player'} played a Queen. Counter ${
-        delta > 0 ? 'increases' : 'decreases'
-      } by 30.`
-    );
-    setPendingQueen(null);
-    playCardAndAdvance(card, playerId, 0, nextCounter);
-  };
-
-  const selectKingTarget = (targetId) => {
-    if (!pendingKing) return;
-    const { card, playerId } = pendingKing;
-    const attacker = players.find((player) => player.id === playerId);
-    const target = players.find((player) => player.id === targetId);
-    if (!attacker || !target) return;
-    let nextDeck = deck;
-    let nextPile = [...pile, card];
-    const nextPlayers = players.map((player) =>
-      player.id === playerId
-        ? { ...player, hand: player.hand.filter((handCard) => handCard.id !== card.id) }
-        : { ...player }
-    );
-    const updated = applyDrawToPlayer(playerId, nextDeck, nextPile, nextPlayers);
-    setPlayers(updated.players);
-    setDeck(updated.deck);
-    setPile(updated.pile);
-    setPendingKing(null);
-    setPendingKill({ attackerId: playerId, targetId });
-    addLog(`${attacker.name} played a King and targeted ${target.name}.`);
-  };
-
-  const resolveKillResponse = (responseCard) => {
-    if (!pendingKill) return;
-    const { attackerId, targetId } = pendingKill;
-    const attacker = players.find((player) => player.id === attackerId);
-    const target = players.find((player) => player.id === targetId);
-    if (!attacker || !target || !target.alive) {
-      setPendingKill(null);
-      return;
-    }
-
-    let nextDeck = deck;
-    let nextPile = [...pile];
-    let nextPlayers = players.map((player) => ({ ...player }));
-
-    const removeResponseCard = () => {
-      if (!responseCard) return;
-      nextPile = [...nextPile, responseCard];
-      nextPlayers = nextPlayers.map((player) =>
-        player.id === targetId
-          ? { ...player, hand: player.hand.filter((handCard) => handCard.id !== responseCard.id) }
-          : player
-      );
-      const updated = applyDrawToPlayer(targetId, nextDeck, nextPile, nextPlayers);
-      nextDeck = updated.deck;
-      nextPile = updated.pile;
-      nextPlayers = updated.players;
-    };
-
-    if (!responseCard) {
-      nextPlayers = eliminatePlayer(targetId, 'No response to the kill.', nextPlayers);
-      setPendingKill(null);
-      setPlayers(nextPlayers);
-      setDeck(nextDeck);
-      setPile(nextPile);
-      if (endIfWinner(nextPlayers)) return;
-      const advance = advanceTurnFrom(attackerId, nextPlayers, skipNext);
-      setSkipNext(advance.skipNextValue);
-      setCurrentPlayerId(advance.nextPlayerId);
-      return;
-    }
-
-    if (responseCard.rank === 'K') {
-      removeResponseCard();
-      addLog(`${target.name} countered with a King. ${attacker.name} is eliminated.`);
-      nextPlayers = eliminatePlayer(attackerId, 'Killed by a King counter.', nextPlayers);
-      setPendingKill(null);
-      setPlayers(nextPlayers);
-      setDeck(nextDeck);
-      setPile(nextPile);
-      if (endIfWinner(nextPlayers)) return;
-      const advance = advanceTurnFrom(attackerId, nextPlayers, skipNext);
-      setSkipNext(advance.skipNextValue);
-      setCurrentPlayerId(advance.nextPlayerId);
-      return;
-    }
-
-    if (responseCard.rank === 'J') {
-      removeResponseCard();
-      const targetIndex = nextPlayers.findIndex((player) => player.id === targetId);
-      const nextIndex = getNextAliveIndex(targetIndex, nextPlayers);
-      const nextTargetId = nextPlayers[nextIndex]?.id ?? null;
-      if (!nextTargetId) {
-        setPendingKill(null);
-        setPlayers(nextPlayers);
-        setDeck(nextDeck);
-        setPile(nextPile);
-        return;
-      }
-      const nextTarget = nextPlayers.find((player) => player.id === nextTargetId);
-      addLog(`${target.name} played a Jack. The kill shifts to ${nextTarget.name}.`);
-      setPendingKill({ attackerId, targetId: nextTargetId });
-      setPlayers(nextPlayers);
-      setDeck(nextDeck);
-      setPile(nextPile);
-      return;
-    }
-
-    if (responseCard.rank === '4') {
-      removeResponseCard();
-      addLog(`${target.name} played a 4 to reflect the kill back to ${attacker.name}.`);
-      setPendingKill({ attackerId, targetId: attackerId });
-      setPlayers(nextPlayers);
-      setDeck(nextDeck);
-      setPile(nextPile);
-    }
-  };
+  const [connectionStatus, setConnectionStatus] = useState('disconnected');
+  const [error, setError] = useState('');
+  const [nameInput, setNameInput] = useState('Player');
+  const [roomCodeInput, setRoomCodeInput] = useState('');
+  const [roomCode, setRoomCode] = useState('');
+  const [playerId, setPlayerId] = useState(null);
+  const [socket, setSocket] = useState(null);
+  const [gameState, setGameState] = useState(null);
 
   useEffect(() => {
-    if (gamePhase !== 'playing') return;
-    if (pendingKill || pendingQueen || pendingKing) return;
-    if (!currentPlayer || !currentPlayer.alive) return;
-    const playable = getPlayableCards(currentPlayer, counter);
-    if (playable.length === 0) {
-      const nextPlayers = eliminatePlayer(
-        currentPlayer.id,
-        `No playable cards without exceeding ${MAX_COUNTER}.`,
-        players
-      );
-      setPlayers(nextPlayers);
-      if (endIfWinner(nextPlayers)) return;
-      const advance = advanceTurnFrom(currentPlayer.id, nextPlayers, skipNext);
-      setSkipNext(advance.skipNextValue);
-      setCurrentPlayerId(advance.nextPlayerId);
+    return () => {
+      if (socket) {
+        socket.close();
+      }
+    };
+  }, [socket]);
+
+  const connect = (mode) => {
+    setError('');
+    setConnectionStatus('connecting');
+    const ws = new WebSocket(WS_URL);
+    ws.onopen = () => {
+      if (mode === 'create') {
+        ws.send(JSON.stringify({ type: 'create_room', name: nameInput }));
+      } else {
+        ws.send(JSON.stringify({ type: 'join_room', name: nameInput, code: roomCodeInput }));
+      }
+    };
+    ws.onmessage = (event) => {
+      let message;
+      try {
+        message = JSON.parse(event.data);
+      } catch (err) {
+        return;
+      }
+      if (message.type === 'room_error') {
+        setError(message.message || 'Unable to join room.');
+        setConnectionStatus('disconnected');
+        ws.close();
+        return;
+      }
+      if (message.type === 'room_joined') {
+        setRoomCode(message.code);
+        setPlayerId(message.playerId);
+        setGameState(message.state);
+        setConnectionStatus('connected');
+        return;
+      }
+      if (message.type === 'state_update') {
+        setGameState(message.state);
+      }
+    };
+    ws.onclose = () => {
+      setConnectionStatus('disconnected');
+      setSocket(null);
+    };
+    setSocket(ws);
+  };
+
+  const leaveRoom = () => {
+    if (socket) {
+      socket.close();
     }
-  }, [
-    gamePhase,
-    pendingKill,
-    pendingQueen,
-    pendingKing,
-    currentPlayer,
-    counter,
-    players,
-    skipNext,
-  ]);
-
-  const canStartGame = playerConfigs.length >= MIN_PLAYERS;
-
-  const updatePlayerConfig = (index, value) => {
-    setPlayerConfigs((prev) =>
-      prev.map((player, idx) => (idx === index ? { ...player, name: value } : player))
-    );
+    setRoomCode('');
+    setPlayerId(null);
+    setGameState(null);
+    setConnectionStatus('disconnected');
   };
 
-  const addPlayerConfig = () => {
-    if (playerConfigs.length >= MAX_PLAYERS) return;
-    setPlayerConfigs((prev) => [
-      ...prev,
-      { id: `cfg-${prev.length}`, name: `Player ${prev.length + 1}` },
-    ]);
+  const sendAction = (action) => {
+    if (!socket || connectionStatus !== 'connected') return;
+    socket.send(JSON.stringify({ type: 'action', roomCode, action }));
   };
 
-  const removePlayerConfig = (index) => {
-    if (playerConfigs.length <= MIN_PLAYERS) return;
-    setPlayerConfigs((prev) => prev.filter((_, idx) => idx !== index));
-  };
+  const currentPlayer = gameState?.players?.find((player) => player.id === gameState.currentPlayerId);
+  const localPlayer = gameState?.players?.find((player) => player.id === playerId);
+  const isHost = gameState?.hostId === playerId;
+  const alivePlayers = useMemo(
+    () => (gameState ? gameState.players.filter((player) => player.alive) : []),
+    [gameState]
+  );
 
   const playableIds = useMemo(() => {
-    if (!currentPlayer) return new Set();
-    return new Set(getPlayableCards(currentPlayer, counter).map((card) => card.id));
-  }, [currentPlayer, counter]);
+    if (!gameState || !localPlayer) return new Set();
+    return new Set(getPlayableCards(localPlayer, gameState.counter).map((card) => card.id));
+  }, [gameState, localPlayer]);
 
   const responseOptions = useMemo(() => {
-    if (!pendingKill) return [];
-    const target = players.find((player) => player.id === pendingKill.targetId);
+    if (!gameState?.pendingKill) return [];
+    const target = gameState.players.find((player) => player.id === gameState.pendingKill.targetId);
     if (!target) return [];
     return target.hand.filter((card) => ['K', 'J', '4'].includes(card.rank));
-  }, [pendingKill, players]);
+  }, [gameState]);
 
   return (
     <div className="app">
@@ -426,70 +126,119 @@ function App() {
         <div className="meta-card">
           <div>
             <span className="meta-label">Counter</span>
-            <strong className="meta-value">{counter}</strong>
+            <strong className="meta-value">{gameState ? gameState.counter : 0}</strong>
           </div>
           <div>
             <span className="meta-label">Deck</span>
-            <strong className="meta-value">{deck === null ? 'Unlimited' : deck.length}</strong>
+            <strong className="meta-value">Unlimited</strong>
           </div>
           <div>
             <span className="meta-label">Pile</span>
-            <strong className="meta-value">{pile.length}</strong>
+            <strong className="meta-value">{gameState ? gameState.pile.length : 0}</strong>
           </div>
         </div>
       </header>
 
-      {gamePhase === 'setup' && (
+      {connectionStatus !== 'connected' && (
         <section className="panel">
           <div className="panel-header">
-            <h2>Set up the table</h2>
-            <p>2 to 10 players. Everyone starts with 2 cards.</p>
+            <h2>Join with a room code</h2>
+            <p>Create a room and share the code with friends.</p>
           </div>
           <div className="player-config">
-            {playerConfigs.map((player, index) => (
-              <div className="player-row" key={player.id}>
-                <input
-                  type="text"
-                  value={player.name}
-                  onChange={(event) => updatePlayerConfig(index, event.target.value)}
-                  aria-label={`Player ${index + 1} name`}
-                />
-                <span className="player-tag">Seat {index + 1}</span>
-                <button
-                  type="button"
-                  className="ghost-button"
-                  onClick={() => removePlayerConfig(index)}
-                  disabled={playerConfigs.length <= MIN_PLAYERS}
-                >
-                  Remove
-                </button>
-              </div>
-            ))}
+            <div className="player-row">
+              <input
+                type="text"
+                value={nameInput}
+                onChange={(event) => setNameInput(event.target.value)}
+                aria-label="Your name"
+                placeholder="Your name"
+              />
+            </div>
+            <div className="player-row">
+              <input
+                type="text"
+                value={roomCodeInput}
+                onChange={(event) => setRoomCodeInput(event.target.value.toUpperCase())}
+                aria-label="Room code"
+                placeholder="Room code"
+              />
+            </div>
           </div>
+          {error && <p className="muted">{error}</p>}
           <div className="panel-actions">
-            <button type="button" className="ghost-button" onClick={addPlayerConfig}>
-              Add player
+            <button
+              type="button"
+              className="ghost-button"
+              onClick={() => connect('join')}
+              disabled={connectionStatus === 'connecting' || roomCodeInput.length < 4}
+            >
+              Join room
             </button>
-            <button type="button" className="primary-button" onClick={startGame} disabled={!canStartGame}>
-              Start game
+            <button
+              type="button"
+              className="primary-button"
+              onClick={() => connect('create')}
+              disabled={connectionStatus === 'connecting'}
+            >
+              Create room
             </button>
           </div>
         </section>
       )}
 
-      {gamePhase === 'playing' && (
+      {connectionStatus === 'connected' && gameState?.phase === 'lobby' && (
+        <section className="panel">
+          <div className="panel-header">
+            <h2>Lobby</h2>
+            <p>Share this room code with your players.</p>
+          </div>
+          <div className="room-code">
+            <span className="meta-label">Room code</span>
+            <strong>{roomCode}</strong>
+          </div>
+          <div className="player-list">
+            {gameState.players.map((player) => (
+              <div
+                key={player.id}
+                className={`player-card ${player.id === playerId ? 'active' : ''} ${player.connected ? '' : 'out'}`}
+              >
+                <div>
+                  <strong>{player.name}</strong>
+                  <span>{player.connected ? 'Connected' : 'Disconnected'}</span>
+                </div>
+                <div className="player-meta">
+                  {player.id === playerId && <span className="tag">You</span>}
+                  {player.id === gameState.hostId && <span className="tag">Host</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+          <div className="panel-actions">
+            <button type="button" className="ghost-button" onClick={leaveRoom}>
+              Leave room
+            </button>
+            <button type="button" className="primary-button" onClick={() => sendAction({ type: 'start_game' })} disabled={!isHost}>
+              Start game
+            </button>
+          </div>
+          {!isHost && <p className="muted">Waiting for the host to start the game.</p>}
+        </section>
+      )}
+
+      {connectionStatus === 'connected' && gameState?.phase === 'playing' && (
         <main className="game-grid">
           <section className="panel">
             <div className="panel-header">
               <h2>Current turn</h2>
               <p>{currentPlayer ? `${currentPlayer.name} is up.` : 'Waiting for next player.'}</p>
             </div>
-            {pendingKill && (
+            {gameState.pendingKill && (
               <div className="kill-panel">
                 <h3>Kill in progress</h3>
                 <p>
-                  {players.find((player) => player.id === pendingKill.attackerId)?.name ?? 'Attacker'} is targeting{' '}
-                  {players.find((player) => player.id === pendingKill.targetId)?.name ?? 'Target'}.
+                  {gameState.players.find((player) => player.id === gameState.pendingKill.attackerId)?.name ?? 'Attacker'} is targeting{' '}
+                  {gameState.players.find((player) => player.id === gameState.pendingKill.targetId)?.name ?? 'Target'}.
                 </p>
                 <div className="hand">
                   {responseOptions.length === 0 && <p className="muted">No response cards available.</p>}
@@ -498,20 +247,26 @@ function App() {
                       key={card.id}
                       type="button"
                       className="card-button special"
-                      onClick={() => resolveKillResponse(card)}
+                      onClick={() => sendAction({ type: 'kill_response', playerId, cardId: card.id })}
+                      disabled={gameState.pendingKill.targetId !== playerId}
                     >
                       {cardLabel(card)}
                       <span>Use {card.rank}</span>
                     </button>
                   ))}
                 </div>
-                <button type="button" className="danger-button" onClick={() => resolveKillResponse(null)}>
+                <button
+                  type="button"
+                  className="danger-button"
+                  onClick={() => sendAction({ type: 'kill_response', playerId, cardId: null })}
+                  disabled={gameState.pendingKill.targetId !== playerId}
+                >
                   Accept the kill
                 </button>
               </div>
             )}
 
-            {pendingQueen && (
+            {gameState.pendingQueen && gameState.pendingQueen.playerId === playerId && (
               <div className="choice-panel">
                 <h3>Queen choice</h3>
                 <p>Choose how to apply the Queen.</p>
@@ -519,16 +274,16 @@ function App() {
                   <button
                     type="button"
                     className="primary-button"
-                    onClick={() => resolveQueen('up')}
-                    disabled={counter + 30 > MAX_COUNTER}
+                    onClick={() => sendAction({ type: 'queen_choice', playerId, direction: 'up' })}
+                    disabled={gameState.counter + 30 > MAX_COUNTER}
                   >
                     Add 30
                   </button>
                   <button
                     type="button"
                     className="ghost-button"
-                    onClick={() => resolveQueen('down')}
-                    disabled={counter - 30 < 0}
+                    onClick={() => sendAction({ type: 'queen_choice', playerId, direction: 'down' })}
+                    disabled={gameState.counter - 30 < 0}
                   >
                     Subtract 30
                   </button>
@@ -536,19 +291,19 @@ function App() {
               </div>
             )}
 
-            {pendingKing && (
+            {gameState.pendingKing && gameState.pendingKing.playerId === playerId && (
               <div className="choice-panel">
                 <h3>Choose a target</h3>
                 <p>Pick a player to kill with the King.</p>
                 <div className="target-grid">
-                  {players
-                    .filter((player) => player.alive && player.id !== pendingKing.playerId)
+                  {gameState.players
+                    .filter((player) => player.alive && player.id !== playerId)
                     .map((player) => (
                       <button
                         key={player.id}
                         type="button"
                         className="ghost-button"
-                        onClick={() => selectKingTarget(player.id)}
+                        onClick={() => sendAction({ type: 'king_target', playerId, targetId: player.id })}
                       >
                         {player.name}
                       </button>
@@ -557,39 +312,42 @@ function App() {
               </div>
             )}
 
-            {!pendingKill && !pendingQueen && !pendingKing && currentPlayer && (
-              <>
-                <div className="hand">
-                  {currentPlayer.hand.map((card) => (
-                    <button
-                      key={card.id}
-                      type="button"
-                      className={`card-button ${playableIds.has(card.id) ? '' : 'disabled'} ${
-                        ['K', 'Q', 'J'].includes(card.rank) || isAceOfSpades(card) ? 'special' : ''
-                      }`}
-                      onClick={() => handlePlayCard(card)}
-                      disabled={!playableIds.has(card.id)}
-                    >
-                      {cardLabel(card)}
-                      <span>
-                        {card.rank === 'K'
-                          ? 'Kill'
-                          : card.rank === 'Q'
-                          ? '+/-30'
-                          : card.rank === 'J'
-                          ? 'Skip'
-                          : card.rank === '4'
-                          ? '4'
-                          : isAceOfSpades(card)
-                          ? 'Reset'
-                          : 'Play'}
-                      </span>
-                    </button>
-                  ))}
-                </div>
-                <p className="muted">Each play draws a new card so you stay at 2 in hand.</p>
-              </>
-            )}
+            {!gameState.pendingKill &&
+              (!gameState.pendingQueen || gameState.pendingQueen.playerId !== playerId) &&
+              (!gameState.pendingKing || gameState.pendingKing.playerId !== playerId) &&
+              localPlayer && (
+                <>
+                  <div className="hand">
+                    {localPlayer.hand.map((card) => (
+                      <button
+                        key={card.id}
+                        type="button"
+                        className={`card-button ${playableIds.has(card.id) ? '' : 'disabled'} ${
+                          ['K', 'Q', 'J'].includes(card.rank) || isAceOfSpades(card) ? 'special' : ''
+                        }`}
+                        onClick={() => sendAction({ type: 'play_card', playerId, cardId: card.id })}
+                        disabled={!playableIds.has(card.id) || gameState.currentPlayerId !== playerId}
+                      >
+                        {cardLabel(card)}
+                        <span>
+                          {card.rank === 'K'
+                            ? 'Kill'
+                            : card.rank === 'Q'
+                            ? '+/-30'
+                            : card.rank === 'J'
+                            ? 'Skip'
+                            : card.rank === '4'
+                            ? '4'
+                            : isAceOfSpades(card)
+                            ? 'Reset'
+                            : 'Play'}
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                  <p className="muted">Each play draws a new card so you stay at 2 in hand.</p>
+                </>
+              )}
           </section>
 
           <section className="panel">
@@ -598,10 +356,10 @@ function App() {
               <p>{alivePlayers.length} still in the game.</p>
             </div>
             <div className="player-list">
-              {players.map((player) => (
+              {gameState.players.map((player) => (
                 <div
                   key={player.id}
-                  className={`player-card ${player.id === currentPlayerId ? 'active' : ''} ${
+                  className={`player-card ${player.id === gameState.currentPlayerId ? 'active' : ''} ${
                     player.alive ? '' : 'out'
                   }`}
                 >
@@ -611,7 +369,8 @@ function App() {
                   </div>
                   <div className="player-meta">
                     <span>{player.hand.length} cards</span>
-                    {player.id === currentPlayerId && <span className="tag">Current</span>}
+                    {player.id === playerId && <span className="tag">You</span>}
+                    {player.id === gameState.currentPlayerId && <span className="tag">Current</span>}
                   </div>
                 </div>
               ))}
@@ -624,8 +383,8 @@ function App() {
               <p>Latest plays and outcomes.</p>
             </div>
             <div className="log-list">
-              {log.length === 0 && <p className="muted">No actions yet.</p>}
-              {log.map((entry, index) => (
+              {gameState.log.length === 0 && <p className="muted">No actions yet.</p>}
+              {gameState.log.map((entry, index) => (
                 <p key={`${entry}-${index}`}>{entry}</p>
               ))}
             </div>
@@ -633,21 +392,24 @@ function App() {
         </main>
       )}
 
-      {gamePhase === 'over' && (
+      {connectionStatus === 'connected' && gameState?.phase === 'over' && (
         <section className="panel">
           <div className="panel-header">
             <h2>Game over</h2>
             <p>{alivePlayers[0]?.name ?? 'A player'} is the winner.</p>
           </div>
           <div className="panel-actions">
-            <button type="button" className="primary-button" onClick={resetGame}>
-              Reset game
+            <button type="button" className="ghost-button" onClick={leaveRoom}>
+              Leave room
+            </button>
+            <button type="button" className="primary-button" onClick={() => sendAction({ type: 'restart_game' })} disabled={!isHost}>
+              Reset to lobby
             </button>
           </div>
         </section>
       )}
 
-      {gamePhase === 'playing' && (
+      {connectionStatus === 'connected' && gameState?.phase === 'playing' && (
         <section className="panel footer-panel">
           <div>
             <h3>Quick rules recap</h3>
@@ -656,8 +418,8 @@ function App() {
               turn. 4 plays as 4 or reflects a King when targeted. Ace of Spades resets the counter.
             </p>
           </div>
-          <button type="button" className="ghost-button" onClick={resetGame}>
-            Restart
+          <button type="button" className="ghost-button" onClick={leaveRoom}>
+            Leave room
           </button>
         </section>
       )}

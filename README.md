@@ -1,5 +1,29 @@
 # Getting Started with Create React App
 
+## Multiplayer Setup (Room Codes)
+
+This app now uses a WebSocket server to power room codes and multiplayer play.
+
+1. Install dependencies:
+
+```
+npm install
+```
+
+2. Start the WebSocket server (default port 8080):
+
+```
+npm run server
+```
+
+3. Start the React app:
+
+```
+npm start
+```
+
+If you host the server elsewhere, set `REACT_APP_WS_URL` to point at it (for example: `ws://your-host:8080`).
+
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 ## Available Scripts
