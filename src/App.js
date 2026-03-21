@@ -23,7 +23,7 @@ const getPlayableCards = (player, counter) => {
 function App() {
   const [connectionStatus, setConnectionStatus] = useState('disconnected');
   const [error, setError] = useState('');
-  const [nameInput, setNameInput] = useState('Player');
+  const [nameInput, setNameInput] = useState('');
   const [roomCodeInput, setRoomCodeInput] = useState('');
   const [roomCode, setRoomCode] = useState('');
   const [playerId, setPlayerId] = useState(null);
@@ -39,6 +39,10 @@ function App() {
   }, [socket]);
 
   const connect = (mode) => {
+    if (!nameInput.trim()) {
+      setError('Please enter your name before continuing.');
+      return;
+    }
     setError('');
     setConnectionStatus('connecting');
     const ws = new WebSocket(WS_URL);
@@ -121,21 +125,17 @@ function App() {
         <div>
           <p className="eyebrow">Multiplayer Card Game</p>
           <h1>100 or Dead</h1>
-          <p className="subtitle">Play to build the pile without breaking 100. Kings and tricks swing the table.</p>
-        </div>
-        <div className="meta-card">
-          <div>
-            <span className="meta-label">Counter</span>
-            <strong className="meta-value">{gameState ? gameState.counter : 0}</strong>
-          </div>
-          <div>
-            <span className="meta-label">Deck</span>
-            <strong className="meta-value">Unlimited</strong>
-          </div>
-          <div>
-            <span className="meta-label">Pile</span>
-            <strong className="meta-value">{gameState ? gameState.pile.length : 0}</strong>
-          </div>
+          <h2>Instructions:</h2>
+          <p className="subtitle">Each player has 2 cards on hand. On your turn, play a card to the pile to add to the counter and draw a card. The goal is to avoid the counter from exceeding 100. Some cards have special skills that can be used to influence the game.<br></br>
+          <ul>
+            <li><strong>Number cards</strong> add their value to the counter.</li>
+            <li><strong>4</strong> can be played as 4 or to reflect a King back to the attacker.</li>
+            <li><strong>Jack</strong> skips the next player's turn.</li>
+            <li><strong>Queen</strong> allows you to add or subtract 30 from the counter.</li>
+            <li><strong>King</strong> lets you choose another player to add the card's value and skip their next turn.</li>
+            <li><strong>Ace of Spades</strong> resets the counter to 0.</li>
+          </ul>
+          </p>
         </div>
       </header>
 
@@ -151,6 +151,7 @@ function App() {
                 type="text"
                 value={nameInput}
                 onChange={(event) => setNameInput(event.target.value)}
+                required
                 aria-label="Your name"
                 placeholder="Your name"
               />
@@ -171,7 +172,7 @@ function App() {
               type="button"
               className="ghost-button"
               onClick={() => connect('join')}
-              disabled={connectionStatus === 'connecting' || roomCodeInput.length < 4}
+              disabled={connectionStatus === 'connecting' || roomCodeInput.length < 4 || !nameInput.trim()}
             >
               Join room
             </button>
@@ -179,7 +180,7 @@ function App() {
               type="button"
               className="primary-button"
               onClick={() => connect('create')}
-              disabled={connectionStatus === 'connecting'}
+              disabled={connectionStatus === 'connecting' || !nameInput.trim()}
             >
               Create room
             </button>
@@ -227,11 +228,28 @@ function App() {
       )}
 
       {connectionStatus === 'connected' && gameState?.phase === 'playing' && (
+      
         <main className="game-grid">
-          <section className="panel">
+            <section className="meta-card">
+              <div>
+                <span className="meta-label">Counter</span>
+                <strong className="meta-value">{gameState ? gameState.counter : 0}</strong>
+              </div>
+              {/* <div>
+                <span className="meta-label">Deck</span>
+                <strong className="meta-value">Unlimited</strong>
+              </div>
+              <div>
+                <span className="meta-label">Pile</span>
+                <strong className="meta-value">{gameState ? gameState.pile.length : 0}</strong>
+              </div> */}
             <div className="panel-header">
-              <h2>Current turn</h2>
-              <p>{currentPlayer ? `${currentPlayer.name} is up.` : 'Waiting for next player.'}</p>
+              {currentPlayer?.id === playerId ? (
+                <h2>Your turn</h2>
+              ) : (
+                <h2>Waiting for {currentPlayer?.name}</h2>
+
+              )}
             </div>
             {gameState.pendingKill && (
               <div className="kill-panel">
@@ -377,6 +395,7 @@ function App() {
             </div>
           </section>
 
+
           <section className="panel log-panel">
             <div className="panel-header">
               <h2>Table log</h2>
@@ -389,6 +408,11 @@ function App() {
               ))}
             </div>
           </section>
+          <section className="panel footer-panel">
+          <button type="button" className="ghost-button" onClick={leaveRoom}>
+            Leave room
+          </button>
+        </section>
         </main>
       )}
 
@@ -409,20 +433,6 @@ function App() {
         </section>
       )}
 
-      {connectionStatus === 'connected' && gameState?.phase === 'playing' && (
-        <section className="panel footer-panel">
-          <div>
-            <h3>Quick rules recap</h3>
-            <p>
-              Stay at or under {MAX_COUNTER}. King targets a player. Queen is plus or minus 30. Jack skips the next
-              turn. 4 plays as 4 or reflects a King when targeted. Ace of Spades resets the counter.
-            </p>
-          </div>
-          <button type="button" className="ghost-button" onClick={leaveRoom}>
-            Leave room
-          </button>
-        </section>
-      )}
     </div>
   );
 }

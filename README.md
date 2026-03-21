@@ -24,6 +24,16 @@ npm start
 
 If you host the server elsewhere, set `REACT_APP_WS_URL` to point at it (for example: `ws://your-host:8080`).
 
+### Local production deploy to GitHub Pages
+
+If you use `npm run deploy` locally, add a `.env.production.local` file (not committed) so the build picks up the deployed WebSocket URL.
+
+Example:
+
+```
+REACT_APP_WS_URL=wss://your-host.onrender.com
+```
+
 This project was bootstrapped with [Create React App](https://github.com/facebook/create-react-app).
 
 ## Available Scripts
