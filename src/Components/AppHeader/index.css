@@ -1,0 +1,37 @@
+.app-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 32px;
+  align-items: flex-start;
+}
+
+.eyebrow {
+  text-transform: uppercase;
+  letter-spacing: 0.2em;
+  font-size: 12px;
+  color: #6a5f56;
+  margin: 0 0 12px;
+}
+
+.app-header h1 {
+  font-size: 44px;
+  margin: 0 0 12px;
+}
+
+.subtitle {
+  margin: 0;
+  max-width: 480px;
+  color: #4d4038;
+}
+
+@media (max-width: 1100px) {
+  .app-header {
+    flex-direction: column;
+  }
+}
+
+@media (max-width: 720px) {
+  .app-header h1 {
+    font-size: 34px;
+  }
+}

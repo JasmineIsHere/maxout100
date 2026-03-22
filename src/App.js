@@ -1,13 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
 import './App.css';
+import AppHeader from './Components/AppHeader';
+import JoinPanel from './Components/JoinPanel';
+import LobbyPanel from './Components/LobbyPanel';
+import PlayingPanel from './Components/PlayingPanel';
+import GameOverPanel from './Components/GameOverPanel';
 
 const MAX_COUNTER = 100;
 const WS_URL = process.env.REACT_APP_WS_URL || 'ws://localhost:8080';
 
 const isAceOfSpades = (card) => card.rank === 'A' && card.suit === 'S';
 const isNumberRank = (rank) => /^[0-9]+$/.test(rank);
-const cardLabel = (card) => `${card.rank}${card.suit}`;
-
 const getPlayableCards = (player, counter) => {
   return player.hand.filter((card) => {
     if (card.rank === 'K' || card.rank === 'J') return true;
@@ -121,316 +124,49 @@ function App() {
 
   return (
     <div className="app">
-      <header className="app-header">
-        <div>
-          <p className="eyebrow">Multiplayer Card Game</p>
-          <h1>100 or Dead</h1>
-          <h2>Instructions:</h2>
-          <p className="subtitle">Each player has 2 cards on hand. On your turn, play a card to the pile to add to the counter and draw a card. The goal is to avoid the counter from exceeding 100. Some cards have special skills that can be used to influence the game.<br></br>
-          <ul>
-            <li><strong>Number cards</strong> add their value to the counter.</li>
-            <li><strong>4</strong> can be played as 4 or to reflect a King back to the attacker.</li>
-            <li><strong>Jack</strong> skips the next player's turn.</li>
-            <li><strong>Queen</strong> allows you to add or subtract 30 from the counter.</li>
-            <li><strong>King</strong> lets you choose another player to add the card's value and skip their next turn.</li>
-            <li><strong>Ace of Spades</strong> resets the counter to 0.</li>
-          </ul>
-          </p>
-        </div>
-      </header>
+      <AppHeader />
 
       {connectionStatus !== 'connected' && (
-        <section className="panel">
-          <div className="panel-header">
-            <h2>Join with a room code</h2>
-            <p>Create a room and share the code with friends.</p>
-          </div>
-          <div className="player-config">
-            <div className="player-row">
-              <input
-                type="text"
-                value={nameInput}
-                onChange={(event) => setNameInput(event.target.value)}
-                required
-                aria-label="Your name"
-                placeholder="Your name"
-              />
-            </div>
-            <div className="player-row">
-              <input
-                type="text"
-                value={roomCodeInput}
-                onChange={(event) => setRoomCodeInput(event.target.value.toUpperCase())}
-                aria-label="Room code"
-                placeholder="Room code"
-              />
-            </div>
-          </div>
-          {error && <p className="muted">{error}</p>}
-          <div className="panel-actions">
-            <button
-              type="button"
-              className="ghost-button"
-              onClick={() => connect('join')}
-              disabled={connectionStatus === 'connecting' || roomCodeInput.length < 4 || !nameInput.trim()}
-            >
-              Join room
-            </button>
-            <button
-              type="button"
-              className="primary-button"
-              onClick={() => connect('create')}
-              disabled={connectionStatus === 'connecting' || !nameInput.trim()}
-            >
-              Create room
-            </button>
-          </div>
-        </section>
+        <JoinPanel
+          nameInput={nameInput}
+          setNameInput={setNameInput}
+          roomCodeInput={roomCodeInput}
+          setRoomCodeInput={setRoomCodeInput}
+          error={error}
+          connectionStatus={connectionStatus}
+          connect={connect}
+        />
       )}
 
       {connectionStatus === 'connected' && gameState?.phase === 'lobby' && (
-        <section className="panel">
-          <div className="panel-header">
-            <h2>Lobby</h2>
-            <p>Share this room code with your players.</p>
-          </div>
-          <div className="room-code">
-            <span className="meta-label">Room code</span>
-            <strong>{roomCode}</strong>
-          </div>
-          <div className="player-list">
-            {gameState.players.map((player) => (
-              <div
-                key={player.id}
-                className={`player-card ${player.id === playerId ? 'active' : ''} ${player.connected ? '' : 'out'}`}
-              >
-                <div>
-                  <strong>{player.name}</strong>
-                  <span>{player.connected ? 'Connected' : 'Disconnected'}</span>
-                </div>
-                <div className="player-meta">
-                  {player.id === playerId && <span className="tag">You</span>}
-                  {player.id === gameState.hostId && <span className="tag">Host</span>}
-                </div>
-              </div>
-            ))}
-          </div>
-          <div className="panel-actions">
-            <button type="button" className="ghost-button" onClick={leaveRoom}>
-              Leave room
-            </button>
-            <button type="button" className="primary-button" onClick={() => sendAction({ type: 'start_game' })} disabled={!isHost}>
-              Start game
-            </button>
-          </div>
-          {!isHost && <p className="muted">Waiting for the host to start the game.</p>}
-        </section>
+        <LobbyPanel
+          gameState={gameState}
+          playerId={playerId}
+          roomCode={roomCode}
+          isHost={isHost}
+          leaveRoom={leaveRoom}
+          sendAction={sendAction}
+        />
       )}
 
       {connectionStatus === 'connected' && gameState?.phase === 'playing' && (
-      
-        <main className="game-grid">
-            <section className="meta-card">
-              <div>
-                <span className="meta-label">Counter</span>
-                <strong className="meta-value">{gameState ? gameState.counter : 0}</strong>
-              </div>
-              {/* <div>
-                <span className="meta-label">Deck</span>
-                <strong className="meta-value">Unlimited</strong>
-              </div>
-              <div>
-                <span className="meta-label">Pile</span>
-                <strong className="meta-value">{gameState ? gameState.pile.length : 0}</strong>
-              </div> */}
-            <div className="panel-header">
-              {currentPlayer?.id === playerId ? (
-                <h2>Your turn</h2>
-              ) : (
-                <h2>Waiting for {currentPlayer?.name}</h2>
-
-              )}
-            </div>
-            {gameState.pendingKill && (
-              <div className="kill-panel">
-                <h3>Kill in progress</h3>
-                <p>
-                  {gameState.players.find((player) => player.id === gameState.pendingKill.attackerId)?.name ?? 'Attacker'} is targeting{' '}
-                  {gameState.players.find((player) => player.id === gameState.pendingKill.targetId)?.name ?? 'Target'}.
-                </p>
-                <div className="hand">
-                  {responseOptions.length === 0 && <p className="muted">No response cards available.</p>}
-                  {responseOptions.map((card) => (
-                    <button
-                      key={card.id}
-                      type="button"
-                      className="card-button special"
-                      onClick={() => sendAction({ type: 'kill_response', playerId, cardId: card.id })}
-                      disabled={gameState.pendingKill.targetId !== playerId}
-                    >
-                      {cardLabel(card)}
-                      <span>Use {card.rank}</span>
-                    </button>
-                  ))}
-                </div>
-                <button
-                  type="button"
-                  className="danger-button"
-                  onClick={() => sendAction({ type: 'kill_response', playerId, cardId: null })}
-                  disabled={gameState.pendingKill.targetId !== playerId}
-                >
-                  Accept the kill
-                </button>
-              </div>
-            )}
-
-            {gameState.pendingQueen && gameState.pendingQueen.playerId === playerId && (
-              <div className="choice-panel">
-                <h3>Queen choice</h3>
-                <p>Choose how to apply the Queen.</p>
-                <div className="panel-actions">
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => sendAction({ type: 'queen_choice', playerId, direction: 'up' })}
-                    disabled={gameState.counter + 30 > MAX_COUNTER}
-                  >
-                    Add 30
-                  </button>
-                  <button
-                    type="button"
-                    className="ghost-button"
-                    onClick={() => sendAction({ type: 'queen_choice', playerId, direction: 'down' })}
-                    disabled={gameState.counter - 30 < 0}
-                  >
-                    Subtract 30
-                  </button>
-                </div>
-              </div>
-            )}
-
-            {gameState.pendingKing && gameState.pendingKing.playerId === playerId && (
-              <div className="choice-panel">
-                <h3>Choose a target</h3>
-                <p>Pick a player to kill with the King.</p>
-                <div className="target-grid">
-                  {gameState.players
-                    .filter((player) => player.alive && player.id !== playerId)
-                    .map((player) => (
-                      <button
-                        key={player.id}
-                        type="button"
-                        className="ghost-button"
-                        onClick={() => sendAction({ type: 'king_target', playerId, targetId: player.id })}
-                      >
-                        {player.name}
-                      </button>
-                    ))}
-                </div>
-              </div>
-            )}
-
-            {!gameState.pendingKill &&
-              (!gameState.pendingQueen || gameState.pendingQueen.playerId !== playerId) &&
-              (!gameState.pendingKing || gameState.pendingKing.playerId !== playerId) &&
-              localPlayer && (
-                <>
-                  <div className="hand">
-                    {localPlayer.hand.map((card) => (
-                      <button
-                        key={card.id}
-                        type="button"
-                        className={`card-button ${playableIds.has(card.id) ? '' : 'disabled'} ${
-                          ['K', 'Q', 'J'].includes(card.rank) || isAceOfSpades(card) ? 'special' : ''
-                        }`}
-                        onClick={() => sendAction({ type: 'play_card', playerId, cardId: card.id })}
-                        disabled={!playableIds.has(card.id) || gameState.currentPlayerId !== playerId}
-                      >
-                        {cardLabel(card)}
-                        <span>
-                          {card.rank === 'K'
-                            ? 'Kill'
-                            : card.rank === 'Q'
-                            ? '+/-30'
-                            : card.rank === 'J'
-                            ? 'Skip'
-                            : card.rank === '4'
-                            ? '4'
-                            : isAceOfSpades(card)
-                            ? 'Reset'
-                            : 'Play'}
-                        </span>
-                      </button>
-                    ))}
-                  </div>
-                  <p className="muted">Each play draws a new card so you stay at 2 in hand.</p>
-                </>
-              )}
-          </section>
-
-          <section className="panel">
-            <div className="panel-header">
-              <h2>Players</h2>
-              <p>{alivePlayers.length} still in the game.</p>
-            </div>
-            <div className="player-list">
-              {gameState.players.map((player) => (
-                <div
-                  key={player.id}
-                  className={`player-card ${player.id === gameState.currentPlayerId ? 'active' : ''} ${
-                    player.alive ? '' : 'out'
-                  }`}
-                >
-                  <div>
-                    <strong>{player.name}</strong>
-                    <span>{player.alive ? 'Alive' : 'Eliminated'}</span>
-                  </div>
-                  <div className="player-meta">
-                    <span>{player.hand.length} cards</span>
-                    {player.id === playerId && <span className="tag">You</span>}
-                    {player.id === gameState.currentPlayerId && <span className="tag">Current</span>}
-                  </div>
-                </div>
-              ))}
-            </div>
-          </section>
-
-
-          <section className="panel log-panel">
-            <div className="panel-header">
-              <h2>Table log</h2>
-              <p>Latest plays and outcomes.</p>
-            </div>
-            <div className="log-list">
-              {gameState.log.length === 0 && <p className="muted">No actions yet.</p>}
-              {gameState.log.map((entry, index) => (
-                <p key={`${entry}-${index}`}>{entry}</p>
-              ))}
-            </div>
-          </section>
-          <section className="panel footer-panel">
-          <button type="button" className="ghost-button" onClick={leaveRoom}>
-            Leave room
-          </button>
-        </section>
-        </main>
+        <PlayingPanel
+          gameState={gameState}
+          playerId={playerId}
+          currentPlayer={currentPlayer}
+          localPlayer={localPlayer}
+          alivePlayers={alivePlayers}
+          responseOptions={responseOptions}
+          playableIds={playableIds}
+          sendAction={sendAction}
+          leaveRoom={leaveRoom}
+          isAceOfSpades={isAceOfSpades}
+          maxCounter={MAX_COUNTER}
+        />
       )}
 
       {connectionStatus === 'connected' && gameState?.phase === 'over' && (
-        <section className="panel">
-          <div className="panel-header">
-            <h2>Game over</h2>
-            <p>{alivePlayers[0]?.name ?? 'A player'} is the winner.</p>
-          </div>
-          <div className="panel-actions">
-            <button type="button" className="ghost-button" onClick={leaveRoom}>
-              Leave room
-            </button>
-            <button type="button" className="primary-button" onClick={() => sendAction({ type: 'restart_game' })} disabled={!isHost}>
-              Reset to lobby
-            </button>
-          </div>
-        </section>
+        <GameOverPanel alivePlayers={alivePlayers} leaveRoom={leaveRoom} sendAction={sendAction} isHost={isHost} />
       )}
 
     </div>

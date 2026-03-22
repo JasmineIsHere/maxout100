@@ -1,0 +1,164 @@
+.panel {
+  background: rgba(255, 255, 255, 0.88);
+  border-radius: 24px;
+  padding: 24px 28px;
+  box-shadow: 0 20px 45px rgba(70, 50, 35, 0.1);
+  border: 1px solid rgba(120, 100, 90, 0.2);
+}
+
+.panel-header h2 {
+  margin: 0 0 6px;
+  font-size: 22px;
+}
+
+.panel-header p {
+  margin: 0;
+  color: #5c4f47;
+}
+
+.panel-actions {
+  display: flex;
+  gap: 12px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+}
+
+.primary-button,
+.ghost-button,
+.danger-button {
+  border-radius: 999px;
+  padding: 10px 18px;
+  font-size: 14px;
+  border: none;
+  cursor: pointer;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.primary-button {
+  background: #2a1f1a;
+  color: #fff;
+  box-shadow: 0 12px 20px rgba(40, 30, 25, 0.25);
+}
+
+.ghost-button {
+  background: #f7f1ed;
+  color: #3b2e27;
+  border: 1px solid #ddcec2;
+}
+
+.danger-button {
+  background: #9f3a2f;
+  color: #fff;
+  box-shadow: 0 12px 20px rgba(159, 58, 47, 0.25);
+}
+
+.primary-button:disabled,
+.ghost-button:disabled,
+.danger-button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  box-shadow: none;
+}
+
+.primary-button:hover:not(:disabled),
+.ghost-button:hover:not(:disabled),
+.danger-button:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.muted {
+  color: #7a6c62;
+  font-size: 13px;
+}
+
+.room-code {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: #fff2e5;
+  border: 1px solid #e1c6b1;
+  margin: 16px 0;
+  font-size: 20px;
+}
+
+.room-code strong {
+  font-size: 24px;
+  letter-spacing: 0.12em;
+}
+
+.player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 18px 0;
+}
+
+.player-card {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px 16px;
+  border-radius: 16px;
+  background: #fdfaf7;
+  border: 1px solid #dccdc0;
+}
+
+.player-card.out {
+  opacity: 0.5;
+}
+
+.player-card.active {
+  border-color: #a46942;
+  background: #fff2e5;
+}
+
+.player-card strong {
+  display: block;
+  margin-bottom: 4px;
+}
+
+.player-card span {
+  font-size: 12px;
+  color: #6f5f55;
+}
+
+.player-meta {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.tag {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: #2a1f1a;
+  color: #fff;
+}
+
+@media (max-width: 900px) {
+  .panel {
+    padding: 20px 22px;
+  }
+}
+
+@media (max-width: 720px) {
+  .panel-actions {
+    justify-content: flex-start;
+  }
+}
+
+@media (max-width: 560px) {
+  .panel {
+    padding: 18px;
+  }
+
+  .room-code {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}

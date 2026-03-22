@@ -295,14 +295,24 @@ const applyAction = (state, action) => {
 
     if (responseCard.rank === 'J') {
       const targetIndex = nextState.players.findIndex((p) => p.id === target.id);
-      const nextIndex = getNextAliveIndex(targetIndex, nextState.players);
+      let nextIndex = getNextAliveIndex(targetIndex, nextState.players);
+      if (nextIndex >= 0) {
+        // Jack skips the next target in the kill chain.
+        const skippedIndex = getNextAliveIndex(nextIndex, nextState.players);
+        if (skippedIndex >= 0) {
+          nextIndex = skippedIndex;
+        }
+      }
       const nextTargetId = nextState.players[nextIndex]?.id ?? null;
       if (!nextTargetId) {
         nextState.pendingKill = null;
         return nextState;
       }
       const nextTarget = nextState.players.find((p) => p.id === nextTargetId);
-      addLog(nextState, `${target.name} played a Jack. The kill shifts to ${nextTarget.name}.`);
+      addLog(
+        nextState,
+        `${target.name} played a Jack. The next target is skipped and the kill shifts to ${nextTarget.name}.`
+      );
       nextState.pendingKill = { attackerId: attacker.id, targetId: nextTargetId };
       return nextState;
     }
