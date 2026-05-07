@@ -16,6 +16,13 @@ There are a few special cards with players can play with different rules:
 - K: Kills another player
 - 4: Reflects an action played on the player. Or can be used as a normal numbered card.
 - Ace of Spades: Resets the "count" pile to 0
+<br><br>
+
+![Screenshot of the lobby screen](/public/lobby.png)
+![Screenshot of the game start where player can see their hand](/public/game-start.png)
+![Screenshot of the game in progress where players can see the game log](/public/game-in-progress.png)
+
+
 
 ## Running Locally
 ### Multiplayer Setup (Room Codes)
