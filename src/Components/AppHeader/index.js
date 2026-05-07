@@ -26,7 +26,7 @@ function AppHeader() {
               <strong>Queen</strong> allows you to add or subtract 30 from the counter.
             </li>
             <li>
-              <strong>King</strong> lets you choose another player to add the card's value and skip their next turn.
+              <strong>King</strong> eliminates a player of your choice.
             </li>
             <li>
               <strong>Ace of Spades</strong> resets the counter to 0.
